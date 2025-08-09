@@ -1,7 +1,7 @@
 // slideshow.c - fullscreen slideshow with aspect ratio and continuous arrow navigation
 // Pure Windows API + dynamic GDI+, no extra SDK headers required
 // Compile: tcc slideshow.c -lgdi32 -lole32 -loleaut32 -lcomdlg32
-// (c) Shpati Koleka, 2025. MIT license. 
+// Copyright (c) 2025 Shpati Koleka. MIT License. 
 
 #include <windows.h>
 #include <stdio.h>
