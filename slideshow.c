@@ -287,38 +287,37 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 DWORD WINAPI DirectoryWatcherThread(LPVOID param) {
     HANDLE hDir = CreateFileW(watchedPath,
-                             FILE_LIST_DIRECTORY,
-                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                             NULL,
-                             OPEN_EXISTING,
-                             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
-                             NULL);
+                              FILE_LIST_DIRECTORY,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              NULL,
+                              OPEN_EXISTING,
+                              FILE_FLAG_BACKUP_SEMANTICS,
+                              NULL);
     if (hDir == INVALID_HANDLE_VALUE) return 1;
 
     char buffer[1024];
     DWORD bytesReturned;
-    OVERLAPPED ol = {0};
-    HANDLE events[2] = { hStopEvent, NULL };
-    events[1] = CreateEvent(NULL, FALSE, FALSE, NULL);
-    ol.hEvent = events[1];
 
     while (1) {
-        if (!ReadDirectoryChangesW(hDir, buffer, sizeof(buffer), TRUE,
-                                   FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME,
-                                   &bytesReturned, &ol, NULL)) {
-            break;
-        }
+        BOOL ok = ReadDirectoryChangesW(hDir,
+                                        buffer,
+                                        sizeof(buffer),
+                                        TRUE,
+                                        FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME,
+                                        &bytesReturned,
+                                        NULL,
+                                        NULL);
 
-        DWORD waitStatus = WaitForMultipleObjects(2, events, FALSE, INFINITE);
-        if (waitStatus == WAIT_OBJECT_0) {
-            // Stop event triggered
+        if (!ok) break;
+
+        // Check if we should stop
+        if (WaitForSingleObject(hStopEvent, 0) == WAIT_OBJECT_0)
             break;
-        }
-        // Directory changed - notify main thread
+
+        // Notify main thread to rescan folder
         PostMessage(hwndMain, WM_APP + 1, 0, 0);
     }
 
-    CloseHandle(events[1]);
     CloseHandle(hDir);
     return 0;
 }
@@ -356,6 +355,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmd, int nSho
 
     ShowWindow(hwndMain, SW_SHOWMAXIMIZED);
 
+    // Prevent monitor and system sleep while slideshow runs
+    SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+
     // Set or reset timer with current durationSec
     if (timerId) KillTimer(hwndMain, timerId);
     timerId = SetTimer(hwndMain, 1, durationSec * 1000, NULL);
@@ -367,5 +369,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmd, int nSho
     }
 
     GdiplusShutdown(gdiplusToken);
+
+    // Allow normal sleep again
+    SetThreadExecutionState(ES_CONTINUOUS);
+    
     return 0;
 }
